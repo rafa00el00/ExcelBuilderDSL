@@ -11,16 +11,17 @@ namespace ExcelBuilderDSL.Excel
         ISheetBuilder WithName(string name);
         ISheetBuilder WithNewLine();
         ISheetBuilder WithColumnValue(object value);
-        SheetClass Build();
+        ISheetHeaderBuilder WithHeader();
+        Lazy<SheetClass> Build();
     }
 
-    public class SheetClass
+    public interface ISheetHeaderBuilder
     {
-        public string Name { get; set; }
-        public Worksheet Sheet { get; set; }
+        ISheetHeaderBuilder WithColumnName(object value);
+        ISheetBuilder EndHeader();
     }
 
-    public class SheetBuilder : ISheetBuilder
+    public class SheetBuilder : ISheetBuilder, ISheetHeaderBuilder
     {
 
         private Queue<Action> actions;
@@ -41,19 +42,26 @@ namespace ExcelBuilderDSL.Excel
             return new SheetBuilder();
         }
 
-        public SheetClass Build()
+        public Lazy<SheetClass> Build()
         {
-            while (actions.Count > 0)
-            {
-                actions.Dequeue()();
-            }
-            return new SheetClass
-            {
-                Name = this.Name,
-                Sheet = new Worksheet(_dataSheet)
-            };
+            return new Lazy<SheetClass>(
+                () =>
+                {
+                    while (actions.Count > 0)
+                    {
+                        actions.Dequeue()();
+                    }
+                    return new SheetClass
+                    {
+                        Name = this.Name,
+                        Sheet = new Worksheet(_dataSheet)
+                    };
+                }
+            )
+            ;
         }
 
+        #region  Simple Line
         public ISheetBuilder WithColumnValue(object value)
         {
             actions.Enqueue(() =>
@@ -89,5 +97,45 @@ namespace ExcelBuilderDSL.Excel
             actions.Enqueue(action);
             return this;
         }
+        #endregion
+
+        #region  Header
+
+        public ISheetHeaderBuilder WithHeader()
+        {
+            WithNewLine();
+            return this;
+        }
+
+        public ISheetHeaderBuilder WithColumnName(object value)
+        {
+            actions.Enqueue(() =>
+            {
+                var row = new Row() { RowIndex = rowNumber };
+                var cell = new Cell()
+                {
+                    CellReference = Util.GetCharColumn(columnNumber) + rowNumber,
+                    CellValue = new CellValue(value.ToString()),
+                    StyleIndex = 0,
+                    DataType = new EnumValue<CellValues>(CellValues.String)
+                };
+
+
+
+                row.Append(cell);
+                _dataSheet.Append(row);
+                columnNumber++;
+            });
+            return this;
+        }
+
+        public ISheetBuilder EndHeader()
+        {
+            return this;
+        }
+
+
+        #endregion
+
     }
 }
